@@ -326,6 +326,15 @@ nni_aio_wait(nni_aio *aio)
 }
 
 bool
+nni_aio_wait_until(nni_aio *aio, nni_time expire)
+{
+	if (aio != NULL && aio->a_expire_q != NULL) {
+		return (nni_task_wait_until(&aio->a_task, expire));
+	}
+	return (false);
+}
+
+bool
 nni_aio_busy(nni_aio *aio)
 {
 	return (nni_task_busy(&aio->a_task));

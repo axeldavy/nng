@@ -105,6 +105,11 @@ extern bool nni_aio_busy(nni_aio *);
 // lieu of a callback to build synchronous constructs on top of AIOs.
 extern void nni_aio_wait(nni_aio *);
 
+// nni_aio_wait_until is like nni_aio_wait, but stops waiting no later than
+// the given absolute time.  Returns true if the aio is still busy (the
+// deadline was reached before completion), false if it completed.
+extern bool nni_aio_wait_until(nni_aio *, nni_time);
+
 // nni_aio_list_init creates a list suitable for use by providers using
 // the a_prov_node member of the aio.  These operations are not locked,
 // but they do have some extra checks -- remove is idempotent for example,

@@ -634,6 +634,12 @@ NNG_DECL void nng_aio_abort(nng_aio *, nng_err);
 // callback or deadlock may occur.
 NNG_DECL void nng_aio_wait(nng_aio *);
 
+// nng_aio_wait_until is like nng_aio_wait, but stops waiting no later than
+// the given absolute time (as returned by nng_clock()).  Returns true if the
+// aio is still busy (the deadline was reached before completion), false if
+// the operation and its callback have both completed.
+NNG_DECL bool nng_aio_wait_until(nng_aio *, nng_time);
+
 // nng_aio_busy returns true if the aio is still busy processing the
 // operation, or executing associated completion functions.  Note that
 // if the completion function schedules a new operation using the aio,

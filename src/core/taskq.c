@@ -210,6 +210,20 @@ nni_task_wait(nni_task *task)
 }
 
 bool
+nni_task_wait_until(nni_task *task, nni_time expire)
+{
+	nni_mtx_lock(&task->task_mtx);
+	while (task->task_busy) {
+		if (nni_cv_until(&task->task_cv, expire) == NNG_ETIMEDOUT) {
+			break;
+		}
+	}
+	bool busy = task->task_busy != 0;
+	nni_mtx_unlock(&task->task_mtx);
+	return (busy);
+}
+
+bool
 nni_task_busy(nni_task *task)
 {
 	bool busy;

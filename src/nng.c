@@ -1982,6 +1982,12 @@ nng_aio_wait(nng_aio *aio)
 }
 
 bool
+nng_aio_wait_until(nng_aio *aio, nng_time expire)
+{
+	return (nni_aio_wait_until(aio, expire));
+}
+
+bool
 nng_aio_busy(nng_aio *aio)
 {
 	return (nni_aio_busy(aio));

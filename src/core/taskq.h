@@ -47,6 +47,12 @@ extern bool nni_task_busy(nni_task *);
 // work is scheduled on the task then it will not return until that
 // work (or any other work subsequently scheduled) is complete.
 extern void nni_task_wait(nni_task *);
+
+// nni_task_wait_until waits for the task to complete, but no later than the
+// given absolute time.  Returns true if the task is still busy (timed out),
+// or false if it completed.
+extern bool nni_task_wait_until(nni_task *, nni_time);
+
 extern void nni_task_init(nni_task *, nni_taskq *, nni_cb, void *);
 
 // nni_task_fini destroys the task.  It will reap resources asynchronously
