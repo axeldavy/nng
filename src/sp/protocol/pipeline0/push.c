@@ -293,7 +293,7 @@ push0_sock_send(void *arg, nni_aio *aio)
 			nni_pollable_clear(&s->writable);
 		}
 		nni_aio_set_msg(aio, NULL);
-		nni_aio_finish(aio, 0, l);
+		nni_aio_finish_sync(aio, 0, l);
 		nni_aio_set_msg(&p->aio_send, m);
 		nni_pipe_send(p->pipe, &p->aio_send);
 		nni_mtx_unlock(&s->m);
@@ -304,7 +304,7 @@ push0_sock_send(void *arg, nni_aio *aio)
 	if (nni_lmq_put(&s->wq, m) == 0) {
 		// Yay, we can.  So we're done.
 		nni_aio_set_msg(aio, NULL);
-		nni_aio_finish(aio, 0, l);
+		nni_aio_finish_sync(aio, 0, l);
 		if (nni_lmq_full(&s->wq)) {
 			nni_pollable_clear(&s->writable);
 		}

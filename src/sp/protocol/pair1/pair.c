@@ -578,7 +578,7 @@ inject:
 			nni_pollable_clear(&s->writable);
 		}
 		nni_aio_set_msg(aio, NULL);
-		nni_aio_finish(aio, 0, len);
+		nni_aio_finish_sync(aio, 0, len);
 		pair1_pipe_send(p, m);
 		nni_mtx_unlock(&s->mtx);
 		return;
@@ -588,7 +588,7 @@ inject:
 	if (nni_lmq_put(&s->wmq, m) == 0) {
 		// Yay, we can.  So we're done.
 		nni_aio_set_msg(aio, NULL);
-		nni_aio_finish(aio, 0, len);
+		nni_aio_finish_sync(aio, 0, len);
 		if (nni_lmq_full(&s->wmq)) {
 			nni_pollable_clear(&s->writable);
 		}
@@ -618,7 +618,7 @@ pair1_sock_recv(void *arg, nni_aio *aio)
 	// it up.  We might need to post another read request as well.
 	if (nni_lmq_get(&s->rmq, &m) == 0) {
 		nni_aio_set_msg(aio, m);
-		nni_aio_finish(aio, 0, nni_msg_len(m));
+		nni_aio_finish_sync(aio, 0, nni_msg_len(m));
 		if (s->rd_ready) {
 			s->rd_ready = false;
 			m           = nni_aio_get_msg(&p->aio_recv);
@@ -639,7 +639,7 @@ pair1_sock_recv(void *arg, nni_aio *aio)
 		m           = nni_aio_get_msg(&p->aio_recv);
 		nni_aio_set_msg(&p->aio_recv, NULL);
 		nni_aio_set_msg(aio, m);
-		nni_aio_finish(aio, 0, nni_msg_len(m));
+		nni_aio_finish_sync(aio, 0, nni_msg_len(m));
 		nni_pipe_recv(p->pipe, &p->aio_recv);
 		nni_pollable_clear(&s->readable);
 		nni_mtx_unlock(&s->mtx);

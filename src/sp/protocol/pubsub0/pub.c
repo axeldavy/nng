@@ -321,7 +321,7 @@ pub0_sock_send(void *arg, nni_aio *aio)
 #endif
 	nni_mtx_unlock(&sock->mtx);
 	nng_msg_free(msg);
-	nni_aio_finish(aio, 0, len);
+	nni_aio_finish_sync(aio, 0, len);
 }
 
 static nng_err

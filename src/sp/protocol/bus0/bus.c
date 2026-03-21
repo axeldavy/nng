@@ -316,7 +316,7 @@ bus0_sock_send(void *arg, nni_aio *aio)
 	nni_mtx_unlock(&s->mtx);
 
 	nni_msg_free(msg);
-	nni_aio_finish(aio, 0, len);
+	nni_aio_finish_sync(aio, 0, len);
 }
 
 static void
@@ -359,7 +359,7 @@ again:
 	}
 	nni_aio_set_msg(aio, msg);
 	nni_mtx_unlock(&s->mtx);
-	nni_aio_finish(aio, 0, nni_msg_len(msg));
+	nni_aio_finish_sync(aio, 0, nni_msg_len(msg));
 }
 
 static nng_err

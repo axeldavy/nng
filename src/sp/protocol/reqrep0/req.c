@@ -537,7 +537,7 @@ req0_run_send_queue(req0_sock *s, nni_aio_completions *sent_list)
 			if (sent_list != NULL) {
 				nni_aio_completions_add(sent_list, aio, 0, 0);
 			} else {
-				nni_aio_finish(aio, 0, 0);
+				nni_aio_finish_sync(aio, 0, 0);
 			}
 		}
 
@@ -666,7 +666,7 @@ req0_ctx_recv(void *arg, nni_aio *aio)
 		nni_pollable_clear(&s->readable);
 	}
 	nni_mtx_unlock(&s->mtx);
-	nni_aio_finish(aio, 0, nni_msg_len(msg));
+	nni_aio_finish_sync(aio, 0, nni_msg_len(msg));
 }
 
 static void

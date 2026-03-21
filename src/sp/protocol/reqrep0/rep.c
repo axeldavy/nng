@@ -194,7 +194,7 @@ rep0_ctx_send(void *arg, nni_aio *aio)
 		nni_mtx_unlock(&s->lk);
 
 		nni_aio_set_msg(aio, NULL);
-		nni_aio_finish(aio, 0, len);
+		nni_aio_finish_sync(aio, 0, len);
 		return;
 	}
 
@@ -468,7 +468,7 @@ rep0_ctx_recv(void *arg, nni_aio *aio)
 
 	nni_msg_header_clear(msg);
 	nni_aio_set_msg(aio, msg);
-	nni_aio_finish(aio, 0, nni_msg_len(msg));
+	nni_aio_finish_sync(aio, 0, nni_msg_len(msg));
 }
 
 static void
