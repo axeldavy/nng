@@ -208,3 +208,94 @@ void
 nni_tls_sys_fini(void)
 {
 }
+
+nng_err
+nng_tls_cert_parse_pem(nng_tls_cert **certp, const char *pem, size_t size)
+{
+        NNI_ARG_UNUSED(certp);
+        NNI_ARG_UNUSED(pem);
+        NNI_ARG_UNUSED(size);
+        return (NNG_ENOTSUP);
+}
+
+nng_err
+nng_tls_cert_parse_der(
+    nng_tls_cert **certp, const uint8_t *der, size_t size)
+{
+        NNI_ARG_UNUSED(certp);
+        NNI_ARG_UNUSED(der);
+        NNI_ARG_UNUSED(size);
+        return (NNG_ENOTSUP);
+}
+
+void
+nng_tls_cert_der(nng_tls_cert *cert, uint8_t *buf, size_t *bufsz)
+{
+        NNI_ARG_UNUSED(cert);
+        NNI_ARG_UNUSED(buf);
+        if (bufsz != NULL) {
+                *bufsz = 0;
+        }
+}
+
+void
+nng_tls_cert_free(nng_tls_cert *cert)
+{
+        NNI_ARG_UNUSED(cert);
+}
+
+nng_err
+nng_tls_cert_subject(nng_tls_cert *cert, char **namep)
+{
+        NNI_ARG_UNUSED(cert);
+        NNI_ARG_UNUSED(namep);
+        return (NNG_ENOTSUP);
+}
+
+nng_err
+nng_tls_cert_issuer(nng_tls_cert *cert, char **namep)
+{
+        NNI_ARG_UNUSED(cert);
+        NNI_ARG_UNUSED(namep);
+        return (NNG_ENOTSUP);
+}
+
+nng_err
+nng_tls_cert_serial_number(nng_tls_cert *cert, char **serialp)
+{
+        NNI_ARG_UNUSED(cert);
+        NNI_ARG_UNUSED(serialp);
+        return (NNG_ENOTSUP);
+}
+
+nng_err
+nng_tls_cert_subject_cn(nng_tls_cert *cert, char **cnp)
+{
+        NNI_ARG_UNUSED(cert);
+        NNI_ARG_UNUSED(cnp);
+        return (NNG_ENOTSUP);
+}
+
+nng_err
+nng_tls_cert_next_alt(nng_tls_cert *cert, char **altp)
+{
+        NNI_ARG_UNUSED(cert);
+        NNI_ARG_UNUSED(altp);
+        return (NNG_ENOTSUP);
+}
+
+nng_err
+nng_tls_cert_not_before(nng_tls_cert *cert, struct tm *tmp)
+{
+        NNI_ARG_UNUSED(cert);
+        NNI_ARG_UNUSED(tmp);
+        return (NNG_ENOTSUP);
+}
+
+nng_err
+nng_tls_cert_not_after(nng_tls_cert *cert, struct tm *tmp)
+{
+        NNI_ARG_UNUSED(cert);
+        NNI_ARG_UNUSED(tmp);
+        return (NNG_ENOTSUP);
+}
