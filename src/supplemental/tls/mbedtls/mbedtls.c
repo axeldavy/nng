@@ -904,6 +904,30 @@ cert_next_alt(nng_tls_engine_cert *crt, char **namep)
 		return (NNG_ENOENT);
 	}
 	crt->next_alt++;
+
+	// iPAddress SANs (context-specific tag 7 = 0x87) contain raw binary
+	// bytes, not a null-terminated string.  Format them as dotted-decimal
+	// (IPv4) or colon-hex (IPv6) so callers receive a printable result.
+	if ((seq->buf.tag & 0x1f) == 7) {
+		if (seq->buf.len == 4) {
+			snprintf(crt->last_alt, sizeof(crt->last_alt),
+			    "%u.%u.%u.%u", seq->buf.p[0], seq->buf.p[1],
+			    seq->buf.p[2], seq->buf.p[3]);
+		} else if (seq->buf.len == 16) {
+			const unsigned char *b = seq->buf.p;
+			snprintf(crt->last_alt, sizeof(crt->last_alt),
+			    "%02x%02x:%02x%02x:%02x%02x:%02x%02x:"
+			    "%02x%02x:%02x%02x:%02x%02x:%02x%02x",
+			    b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+			    b[8], b[9], b[10], b[11], b[12], b[13], b[14],
+			    b[15]);
+		} else {
+			return (NNG_EINVAL);
+		}
+		*namep = crt->last_alt;
+		return (NNG_OK);
+	}
+
 	if (seq->buf.len >= sizeof(crt->last_alt)) {
 		return (NNG_EINVAL);
 	}

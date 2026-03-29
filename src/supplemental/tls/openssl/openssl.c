@@ -51,8 +51,10 @@ struct nng_tls_engine_cert {
 	X509 *crt;
 	char *subject;
 	char *issuer;
-	char  serial[64]; // maximum binary serial is 20 bytes
+	char  serial[64];    // maximum binary serial is 20 bytes
 	int   next_alt;
+	char  cn[256];       // cached subject common name
+	char  last_alt[256]; // cached last SAN string (DNS name or IP address)
 };
 
 typedef struct psk {
@@ -825,15 +827,18 @@ ossl_cert_free(nng_tls_engine_cert *cert)
 static nng_err
 ossl_cert_get_der(nng_tls_engine_cert *cert, uint8_t *buf, size_t *sz)
 {
-	uint8_t *der;
+	uint8_t *der = NULL;
 	int      derSz;
 	derSz = i2d_X509(cert->crt, &der);
 	if (*sz < (size_t) derSz) {
 		*sz = (size_t) derSz;
+		OPENSSL_free(der);
 		return (NNG_ENOSPC);
 	}
 	*sz = (size_t) derSz;
-	memcpy(buf, der, *sz);
+	if (buf != NULL) {
+		memcpy(buf, der, *sz);
+	}
 	OPENSSL_free(der);
 	return (NNG_OK);
 }
@@ -842,15 +847,17 @@ static nng_err
 ossl_cert_parse_der(
     nng_tls_engine_cert **crtp, const uint8_t *der, size_t size)
 {
-	X509                *x;
 	nng_tls_engine_cert *cert;
 
 	if ((cert = nni_zalloc(sizeof(*cert))) == NULL) {
 		return (NNG_ENOMEM);
 	}
-	if ((cert->crt = d2i_X509(&x, &der, size)) == NULL) {
+	// Pass NULL so OpenSSL always allocates a fresh X509; passing &x
+	// where x is uninitialised causes d2i_X509 to treat garbage as an
+	// existing object and crash in CRYPTO_free_ex_data.
+	if ((cert->crt = d2i_X509(NULL, &der, size)) == NULL) {
 		nni_free(cert, sizeof(*cert));
-		return (NNG_ENOMEM);
+		return (NNG_ECRYPTO);
 	}
 	*crtp = cert;
 	return (NNG_OK);
@@ -861,7 +868,7 @@ ossl_cert_parse_pem(nng_tls_engine_cert **crtp, const char *pem, size_t size)
 {
 	nng_tls_engine_cert *cert;
 
-	if ((cert = nni_zalloc(sizeof(*crtp))) == NULL) {
+	if ((cert = nni_zalloc(sizeof(*cert))) == NULL) {
 		return (NNG_ENOMEM);
 	}
 	BIO  *certb = BIO_new_mem_buf(pem, size);
@@ -923,9 +930,9 @@ ossl_cert_serial(nng_tls_engine_cert *cert, char **serial)
 		return (NNG_OK);
 	}
 
-	const ASN1_INTEGER *as  = X509_get0_serialNumber(cert->crt);
-	BIGNUM             *bn  = ASN1_INTEGER_to_BN(as, NULL);
-	char               *hex = BN_bn2hex(bn);
+	const ASN1_INTEGER *as;
+	BIGNUM             *bn;
+	char               *hex;
 
 	if ((as = X509_get0_serialNumber(cert->crt)) == NULL) {
 		return (NNG_ENOENT);
@@ -948,6 +955,11 @@ ossl_cert_serial(nng_tls_engine_cert *cert, char **serial)
 static nng_err
 ossl_cert_subject_cn(nng_tls_engine_cert *cert, char **cn)
 {
+	if (cert->cn[0] != '\0') {
+		*cn = cert->cn;
+		return (NNG_OK);
+	}
+
 	X509_NAME *xn  = X509_get_subject_name(cert->crt);
 	int        pos = -1;
 	for (;;) {
@@ -968,13 +980,10 @@ ossl_cert_subject_cn(nng_tls_engine_cert *cert, char **cn)
 		if (ASN1_STRING_to_UTF8(&us, as) <= 0) {
 			continue;
 		}
-		// We need to use nng_strdup so that nng_strfree works.
-		// This is probably not particularly needed for most platforms
-		// where nng_free / nng_strfree are thin wrappers around free,
-		// but let's be pedantic about it.
-		*cn = nng_strdup((char *) us);
+		snprintf(cert->cn, sizeof(cert->cn), "%s", (char *) us);
 		free(us);
-		return (*cn == NULL ? NNG_ENOMEM : NNG_OK);
+		*cn = cert->cn;
+		return (NNG_OK);
 	}
 	return (NNG_ENOENT);
 }
@@ -1005,8 +1014,7 @@ ossl_cert_next_alt(nng_tls_engine_cert *cert, char **alt)
 
 	cert->next_alt++;
 
-	*alt = NULL;
-	rv   = NNG_OK;
+	rv = NNG_OK;
 
 	char                     ip_str[46]; // enough for IPv6
 	enum nng_sockaddr_family af = NNG_AF_INET;
@@ -1014,7 +1022,11 @@ ossl_cert_next_alt(nng_tls_engine_cert *cert, char **alt)
 	switch (san->type) {
 	case GEN_DNS:
 		if (san->d.dNSName != NULL && san->d.dNSName->data != NULL) {
-			*alt = nng_strdup((char *) san->d.dNSName->data);
+			snprintf(cert->last_alt, sizeof(cert->last_alt), "%s",
+			    (char *) san->d.dNSName->data);
+			*alt = cert->last_alt;
+		} else {
+			rv = NNG_ENOENT;
 		}
 		break;
 	case GEN_IPADD:
@@ -1022,7 +1034,8 @@ ossl_cert_next_alt(nng_tls_engine_cert *cert, char **alt)
 			af = NNG_AF_INET6;
 		}
 		nni_inet_ntop(af, san->d.iPAddress->data, ip_str);
-		*alt = nng_strdup(ip_str);
+		snprintf(cert->last_alt, sizeof(cert->last_alt), "%s", ip_str);
+		*alt = cert->last_alt;
 		break;
 	// NB: We only return DNS or IP names for now, not emails or other
 	// strings.
@@ -1031,10 +1044,6 @@ ossl_cert_next_alt(nng_tls_engine_cert *cert, char **alt)
 		break;
 	}
 	sk_GENERAL_NAME_free(names);
-
-	if ((*alt == NULL) && (rv == NNG_OK)) {
-		rv = NNG_ENOMEM;
-	}
 	return (rv);
 }
 
