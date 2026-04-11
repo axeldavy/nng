@@ -29,6 +29,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Include cmake-generated build configuration before ssl.h so that all
+// compile-time options (OPENSSL_EXTRA, KEEP_PEER_CERT, etc.) are active
+// when wolfssl/ssl.h is parsed.  Without this the headers hide functions
+// that were compiled into the library.
+#if __has_include(<wolfssl/options.h>)
+#include <wolfssl/options.h>
+#endif
 #include <wolfssl/ssl.h>
 
 #include "../../../core/nng_impl.h"
@@ -365,7 +372,7 @@ wolf_conn_peer_cert(nng_tls_engine_conn *ec, nng_tls_engine_cert **certp)
 		return (NNG_ENOENT);
 	}
 	if ((cert = nni_zalloc(sizeof(*cert))) == NULL) {
-		wolfSSL_X509_free(wc);
+		wolfSSL_FreeX509(wc);
 		return (NNG_ENOMEM);
 	}
 	cert->crt = wc;
@@ -392,7 +399,7 @@ wolf_conn_peer_cn(nng_tls_engine_conn *ec)
 	if (cn != NULL) {
 		cn = nng_strdup(cn);
 	}
-	wolfSSL_X509_free(cert);
+	wolfSSL_FreeX509(cert);
 	return (cn);
 #else
 	NNI_ARG_UNUSED(ec);
@@ -755,7 +762,7 @@ wolf_cert_free(nng_tls_engine_cert *cert)
 		wolfSSL_Free(cert->issuer);
 	}
 	if (cert->crt != NULL) {
-		wolfSSL_X509_free(cert->crt);
+		wolfSSL_FreeX509(cert->crt);
 	}
 	nni_free(cert, sizeof(*cert));
 #else
@@ -839,7 +846,7 @@ wolf_cert_parse_pem(nng_tls_engine_cert **crtp, const char *pem, size_t size)
 static nng_err
 wolf_cert_subject(nng_tls_engine_cert *cert, char **subject)
 {
-#ifdef NNG_WOLFSSL_HAVE_PEER_CERT
+#if defined(NNG_WOLFSSL_HAVE_PEER_CERT) && defined(OPENSSL_EXTRA)
 	WOLFSSL_X509_NAME *xn;
 
 	if (cert->subject != NULL) {
@@ -864,7 +871,7 @@ wolf_cert_subject(nng_tls_engine_cert *cert, char **subject)
 static nng_err
 wolf_cert_issuer(nng_tls_engine_cert *cert, char **issuer)
 {
-#ifdef NNG_WOLFSSL_HAVE_PEER_CERT
+#if defined(NNG_WOLFSSL_HAVE_PEER_CERT) && defined(OPENSSL_EXTRA)
 	WOLFSSL_X509_NAME *xn;
 
 	if (cert->issuer != NULL) {
@@ -951,7 +958,7 @@ wolf_cert_next_alt(nng_tls_engine_cert *cert, char **alt)
 static nng_err
 wolf_cert_not_before(nng_tls_engine_cert *cert, struct tm *tmp)
 {
-#ifdef NNG_WOLFSSL_HAVE_PEER_CERT
+#if defined(NNG_WOLFSSL_HAVE_PEER_CERT) && defined(OPENSSL_EXTRA)
 	WOLFSSL_ASN1_TIME *when;
 	when = wolfSSL_X509_get_notBefore(cert->crt);
 	wolfSSL_ASN1_TIME_to_tm(when, tmp);
@@ -966,7 +973,7 @@ wolf_cert_not_before(nng_tls_engine_cert *cert, struct tm *tmp)
 static nng_err
 wolf_cert_not_after(nng_tls_engine_cert *cert, struct tm *tmp)
 {
-#ifdef NNG_WOLFSSL_HAVE_PEER_CERT
+#if defined(NNG_WOLFSSL_HAVE_PEER_CERT) && defined(OPENSSL_EXTRA)
 	WOLFSSL_ASN1_TIME *when;
 	when = wolfSSL_X509_get_notAfter(cert->crt);
 	wolfSSL_ASN1_TIME_to_tm(when, tmp);
