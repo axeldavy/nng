@@ -198,16 +198,39 @@ wolf_conn_recv(nng_tls_engine_conn *ec, uint8_t *buf, size_t *szp)
 	if ((rv = wolfSSL_read(ec->ssl, buf, (int) *szp)) < 0) {
 		rv = wolfSSL_get_error(ec->ssl, rv);
 		switch (rv) {
-
-		case SSL_ERROR_WANT_READ:
-		case SSL_ERROR_WANT_WRITE:
+		// Async — call again
+		case WOLFSSL_ERROR_WANT_READ:
+		case WOLFSSL_ERROR_WANT_WRITE:
 			return (NNG_EAGAIN);
-		case SSL_ERROR_SSL:
-			return (NNG_ECRYPTO);
-		case SSL_ERROR_SYSCALL:
+		// Clean shutdown: peer sent close_notify
+		case WOLFSSL_ERROR_ZERO_RETURN: // OpenSSL-compat positive code
+		case ZERO_RETURN:               // native -343
+		case SOCKET_PEER_CLOSED_E:      // -397: underlying transport closed
+			return (NNG_ECLOSED);
+		// OS-level I/O error
+		case WOLFSSL_ERROR_SYSCALL:
+		case SOCKET_ERROR_E: // -308: error state on socket
 			return (NNG_ESYSERR);
+		// Out of memory
+		case MEMORY_ERROR: // -303
+			return (NNG_ENOMEM);
+		// Peer authentication / certificate failures
+		case NO_PEER_CERT:          // -345: peer didn't send certificate
+		case NO_PEER_KEY:           // -316: need peer's key
+		case NO_PEER_VERIFY:        // -378: need peer cert verify
+		case VERIFY_CERT_ERROR:     // -329
+		case VERIFY_SIGN_ERROR:     // -330
+		case VERIFY_FINISHED_ERROR: // -304
+		case VERIFY_MAC_ERROR:      // -305
+		case DOMAIN_NAME_MISMATCH:  // -322
+		case IPADDR_MISMATCH:       // -325
+		case NOT_CA_ERROR:          // -357
+		case OCSP_CERT_REVOKED:     // -360
+		case CRL_CERT_REVOKED:      // -361
+			return (NNG_EPEERAUTH);
+		// All other TLS/crypto errors
 		default:
-			return (NNG_EINTERNAL);
+			return (NNG_ECRYPTO);
 		}
 	}
 	*szp = (size_t) rv;
@@ -222,15 +245,39 @@ wolf_conn_send(nng_tls_engine_conn *ec, const uint8_t *buf, size_t *szp)
 	if ((rv = wolfSSL_write(ec->ssl, buf, (int) (*szp))) <= 0) {
 		rv = wolfSSL_get_error(ec->ssl, rv);
 		switch (rv) {
-		case SSL_ERROR_WANT_READ:
-		case SSL_ERROR_WANT_WRITE:
+		// Async — call again
+		case WOLFSSL_ERROR_WANT_READ:
+		case WOLFSSL_ERROR_WANT_WRITE:
 			return (NNG_EAGAIN);
-		case SSL_ERROR_SSL:
-			return (NNG_ECRYPTO);
-		case SSL_ERROR_SYSCALL:
+		// Clean shutdown: peer sent close_notify
+		case WOLFSSL_ERROR_ZERO_RETURN: // OpenSSL-compat positive code
+		case ZERO_RETURN:               // native -343
+		case SOCKET_PEER_CLOSED_E:      // -397: underlying transport closed
+			return (NNG_ECLOSED);
+		// OS-level I/O error
+		case WOLFSSL_ERROR_SYSCALL:
+		case SOCKET_ERROR_E: // -308: error state on socket
 			return (NNG_ESYSERR);
+		// Out of memory
+		case MEMORY_ERROR: // -303
+			return (NNG_ENOMEM);
+		// Peer authentication / certificate failures
+		case NO_PEER_CERT:          // -345: peer didn't send certificate
+		case NO_PEER_KEY:           // -316: need peer's key
+		case NO_PEER_VERIFY:        // -378: need peer cert verify
+		case VERIFY_CERT_ERROR:     // -329
+		case VERIFY_SIGN_ERROR:     // -330
+		case VERIFY_FINISHED_ERROR: // -304
+		case VERIFY_MAC_ERROR:      // -305
+		case DOMAIN_NAME_MISMATCH:  // -322
+		case IPADDR_MISMATCH:       // -325
+		case NOT_CA_ERROR:          // -357
+		case OCSP_CERT_REVOKED:     // -360
+		case CRL_CERT_REVOKED:      // -361
+			return (NNG_EPEERAUTH);
+		// All other TLS/crypto errors
 		default:
-			return (NNG_EINTERNAL);
+			return (NNG_ECRYPTO);
 		}
 	}
 	*szp = (size_t) rv;
@@ -251,10 +298,29 @@ wolf_conn_handshake(nng_tls_engine_conn *ec)
 		case WOLFSSL_ERROR_WANT_WRITE:
 		case WOLFSSL_ERROR_WANT_READ:
 			return (NNG_EAGAIN);
+		// Out of memory
+		case MEMORY_ERROR: // -303
+			return (NNG_ENOMEM);
+		// Peer authentication / certificate failures
+		case NO_PEER_CERT:          // -345: peer didn't send certificate
+		case NO_PEER_KEY:           // -316: need peer's key
+		case NO_PEER_VERIFY:        // -378: need peer cert verify
+		case VERIFY_CERT_ERROR:     // -329
+		case VERIFY_SIGN_ERROR:     // -330
+		case VERIFY_FINISHED_ERROR: // -304
+		case VERIFY_MAC_ERROR:      // -305
+		case DOMAIN_NAME_MISMATCH:  // -322
+		case IPADDR_MISMATCH:       // -325
+		case NOT_CA_ERROR:          // -357
+		case OCSP_CERT_REVOKED:     // -360
+		case CRL_CERT_REVOKED:      // -361
+		case CLIENT_ID_ERROR:       // -331: PSK client identity error
+		case PSK_KEY_ERROR:         // -333: PSK key error
+			tls_log_err("NNG-TLS-CONN-FAIL",
+			    "TLS peer authentication failed", rv);
+			return (NNG_EPEERAUTH);
+		// All other TLS/protocol/crypto errors
 		default:
-			// This can fail if we do not have a certificate
-			// for the peer.  This will manifest as a failure
-			// during nng_dialer_start typically.
 			tls_log_err("NNG-TLS-CONN-FAIL",
 			    "Failed to setup TLS connection", rv);
 			return (NNG_ECRYPTO);
