@@ -433,14 +433,23 @@ conn_peer_cn(nng_tls_engine_conn *ec)
 		return (NULL);
 	}
 
+	// Advance past "CN="; find the end of the CN value, which is
+	// terminated by ", " (the mbedTLS RDN separator) or end-of-string.
 	pos += 3;
-	len -= (int) (pos - buf - 1);
-	if (len <= 1) {
+	const char *end = pos;
+	while (*end != '\0' && !(*end == ',' && *(end + 1) == ' ')) {
+		end++;
+	}
+	size_t cnlen = (size_t)(end - pos);
+	if (cnlen == 0) {
 		return (NULL);
 	}
-
-	char *rv = malloc(len);
-	memcpy(rv, pos, len);
+	char *rv = nni_alloc(cnlen + 1);
+	if (rv == NULL) {
+		return (NULL);
+	}
+	memcpy(rv, pos, cnlen);
+	rv[cnlen] = '\0';
 	return (rv);
 }
 
@@ -1093,7 +1102,7 @@ tls_engine_init(void)
 #endif
 	// Uncomment the following to have noisy debug from mbedTLS.
 	// This may be useful when trying to debug failures.
-	mbedtls_debug_set_threshold(1);
+	// mbedtls_debug_set_threshold(1);
 
 	mbedtls_ssl_cookie_init(&mbed_ssl_cookie_ctx);
 #if MBEDTLS_VERSION_MAJOR < 4

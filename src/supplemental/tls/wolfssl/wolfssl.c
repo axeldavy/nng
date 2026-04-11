@@ -177,7 +177,7 @@ wolf_conn_init(nng_tls_engine_conn *ec, void *tls, nng_tls_engine_config *cfg,
 		    WOLFSSL_SUCCESS) {
 			wolfSSL_free(ec->ssl);
 			ec->ssl = NULL;
-			return (NNG_ENOMEM);
+			return (NNG_ECRYPTO);
 		}
 	}
 	wolfSSL_SetIOReadCtx(ec->ssl, ec->tls);
@@ -326,6 +326,7 @@ wolf_conn_peer_cn(nng_tls_engine_conn *ec)
 	if (cn != NULL) {
 		cn = nng_strdup(cn);
 	}
+	wolfSSL_X509_free(cert);
 	return (cn);
 #else
 	NNI_ARG_UNUSED(ec);
@@ -359,9 +360,6 @@ wolf_config_init(nng_tls_engine_config *cfg, enum nng_tls_mode mode)
 	WOLFSSL_METHOD *method;
 	int             rv;
 
-	char buf[4096];
-	wolfSSL_get_ciphers(buf, sizeof(buf));
-
 	cfg->mode = mode;
 	NNI_LIST_INIT(&cfg->psks, psk, node);
 	if (mode == NNG_TLS_MODE_SERVER) {
@@ -384,6 +382,8 @@ wolf_config_init(nng_tls_engine_config *cfg, enum nng_tls_mode mode)
 	    strlen(dh2048), WOLFSSL_FILETYPE_PEM);
 	if (rv != WOLFSSL_SUCCESS) {
 		tls_log_err("NNG-TLS-DH", "Failed loading DH parameter", rv);
+		wolfSSL_CTX_free(cfg->ctx);
+		cfg->ctx = NULL;
 		return (NNG_ECRYPTO);
 	}
 #endif
@@ -393,6 +393,8 @@ wolf_config_init(nng_tls_engine_config *cfg, enum nng_tls_mode mode)
 	if (rv != WOLFSSL_SUCCESS) {
 		tls_log_err(
 		    "NNG-TLS-VERSION", "Failed setting min TLS version", rv);
+		wolfSSL_CTX_free(cfg->ctx);
+		cfg->ctx = NULL;
 		return (NNG_ECRYPTO);
 	}
 	wolfSSL_CTX_set_verify(cfg->ctx, auth_mode, NULL);
@@ -541,8 +543,6 @@ static int
 wolf_config_auth_mode(nng_tls_engine_config *cfg, nng_tls_auth_mode mode)
 {
 	cfg->auth_mode = mode;
-	// XXX: REMOVE ME
-	return (0);
 	switch (mode) {
 	case NNG_TLS_AUTH_MODE_NONE:
 		wolfSSL_CTX_set_verify(cfg->ctx, SSL_VERIFY_NONE, NULL);

@@ -378,7 +378,6 @@ ossl_conn_handshake(nng_tls_engine_conn *ec)
 		    "Failed to setup TLS connection", ERR_get_error());
 		return (NNG_ECRYPTO);
 	}
-	return (0);
 }
 
 static bool
@@ -389,12 +388,14 @@ ossl_conn_verified(nng_tls_engine_conn *ec)
 		return (false);
 	case NNG_TLS_AUTH_MODE_REQUIRED:
 		return (true);
-	case NNG_TLS_AUTH_MODE_OPTIONAL:
-		if (SSL_get_verify_result(ec->ssl) == X509_V_OK &&
-		    SSL_get_peer_certificate(ec->ssl) != NULL) {
-			return (true);
+	case NNG_TLS_AUTH_MODE_OPTIONAL: {
+		X509 *peer = SSL_get_peer_certificate(ec->ssl);
+		if (peer != NULL) {
+			X509_free(peer);
+			return (SSL_get_verify_result(ec->ssl) == X509_V_OK);
 		}
 		return (false);
+	}
 	default:
 		return (false);
 	}
@@ -423,42 +424,43 @@ ossl_conn_peer_cn(nng_tls_engine_conn *ec)
 {
 	X509      *cert;
 	X509_NAME *xn;
-	char      *cn;
+	char      *cn = NULL;
 	if ((cert = SSL_get_peer_certificate(ec->ssl)) == NULL) {
 		return (NULL);
 	}
 	xn = X509_get_subject_name(cert);
-	if (xn == NULL) {
-		return (NULL);
+	if (xn != NULL) {
+		int pos = -1;
+		for (;;) {
+			X509_NAME_ENTRY *entry;
+			pos = X509_NAME_get_index_by_NID(
+			    xn, NID_commonName, pos);
+			if (pos == -1) {
+				break;
+			}
+			entry = X509_NAME_get_entry(xn, pos);
+			if (entry == NULL) {
+				continue;
+			}
+			ASN1_STRING *as;
+			if ((as = X509_NAME_ENTRY_get_data(entry)) == NULL) {
+				continue;
+			}
+			unsigned char *us;
+			if (ASN1_STRING_to_UTF8(&us, as) <= 0) {
+				continue;
+			}
+			// We need to use nng_strdup so that nng_strfree works.
+			// This is probably not particularly needed for most
+			// platforms where nng_free / nng_strfree are thin wrappers
+			// around free, but let's be pedantic about it.
+			cn = nng_strdup((char *) us);
+			OPENSSL_free(us);
+			break;
+		}
 	}
-	int pos = -1;
-	for (;;) {
-		X509_NAME_ENTRY *entry;
-		pos = X509_NAME_get_index_by_NID(xn, NID_commonName, pos);
-		if (pos == -1) {
-			return (NULL);
-		}
-		entry = X509_NAME_get_entry(xn, pos);
-		if (entry == NULL) {
-			continue;
-		}
-		ASN1_STRING *as;
-		if ((as = X509_NAME_ENTRY_get_data(entry)) == NULL) {
-			continue;
-		}
-		unsigned char *us;
-		if (ASN1_STRING_to_UTF8(&us, as) <= 0) {
-			continue;
-		}
-		// We need to use nng_strdup so that nng_strfree works.
-		// This is probably not particularly needed for most platforms
-		// where nng_free / nng_strfree are thin wrappers around free,
-		// but let's be pedantic about it.
-		cn = nng_strdup((char *) us);
-		free(us);
-		return (cn);
-	}
-	return (NULL);
+	X509_free(cert);
+	return (cn);
 }
 
 static void
@@ -512,11 +514,15 @@ ossl_config_init(nng_tls_engine_config *cfg, enum nng_tls_mode mode)
 	if (!SSL_CTX_set_min_proto_version(cfg->ctx, cfg->min_ver)) {
 		tls_log_err("NNG-TLS-VERSION",
 		    "Failed setting min TLS version", ERR_get_error());
+		SSL_CTX_free(cfg->ctx);
+		cfg->ctx = NULL;
 		return (NNG_ECRYPTO);
 	}
 	if (!SSL_CTX_set_max_proto_version(cfg->ctx, cfg->max_ver)) {
 		tls_log_err("NNG-TLS-VERSION",
 		    "Failed setting max TLS version", ERR_get_error());
+		SSL_CTX_free(cfg->ctx);
+		cfg->ctx = NULL;
 		return (NNG_ECRYPTO);
 	}
 	SSL_CTX_set_verify(cfg->ctx, auth_mode, NULL);
@@ -690,6 +696,9 @@ ossl_config_ca_chain(
     nng_tls_engine_config *cfg, const char *certs, const char *crl)
 {
 	X509_STORE *cert_store = X509_STORE_new();
+	if (cert_store == NULL) {
+		return (NNG_ENOMEM);
+	}
 
 	BIO *crtb = BIO_new_mem_buf(certs, -1);
 
